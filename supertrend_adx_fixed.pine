@@ -1,0 +1,60 @@
+//@version=5
+indicator("Supertrend with ADX Filter", overlay=true)
+
+// === INPUTS ===
+factor = input.float(3.0, "Supertrend Factor", step=0.1, minval=0.1, maxval=10.0)
+atrPeriod = input.int(10, "ATR Period", minval=1, maxval=50)
+adxPeriod = input.int(14, "ADX Period", minval=1, maxval=50)
+adxThreshold = input.int(24, "ADX Threshold", minval=10, maxval=50)
+
+// === CALCULATIONS ===
+// ATR calculation
+atr = ta.atr(atrPeriod)
+
+// Supertrend calculation
+hl2 = (high + low) / 2
+upperBand = hl2 + factor * atr
+lowerBand = hl2 - factor * atr
+
+var float trendUp = na
+var float trendDown = na
+var int trend = 1
+
+// Proper supertrend logic
+trendUp := na(trendUp[1]) ? lowerBand : (close[1] > trendUp[1] ? math.max(lowerBand, trendUp[1]) : lowerBand)
+trendDown := na(trendDown[1]) ? upperBand : (close[1] < trendDown[1] ? math.min(upperBand, trendDown[1]) : upperBand)
+
+trend := close > trendUp[1] ? 1 : close < trendDown[1] ? -1 : nz(trend[1], 1)
+supertrend = trend == 1 ? trendUp : trendDown
+
+// ADX calculation
+adx = ta.adx(adxPeriod)
+
+// === SIGNAL CONDITIONS ===
+trendChange = trend != trend[1]
+buySignal = trendChange and trend == 1 and adx > adxThreshold
+sellSignal = trendChange and trend == -1 and adx > adxThreshold
+
+// === PLOTS ===
+// Supertrend line
+supertrendColor = trend == 1 ? color.green : color.red
+plot(supertrend, title="Supertrend", color=supertrendColor, linewidth=2)
+
+// Buy/Sell signals
+plotshape(buySignal, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small, text="BUY")
+plotshape(sellSignal, title="Sell Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small, text="SELL")
+
+// Background color for trend
+bgcolor(trend == 1 ? color.new(color.green, 95) : color.new(color.red, 95), title="Trend Background")
+
+// === ALERTS ===
+alertcondition(buySignal, title="Supertrend Buy", message="Supertrend Buy Signal - ADX: " + str.tostring(adx, "#.##"))
+alertcondition(sellSignal, title="Supertrend Sell", message="Supertrend Sell Signal - ADX: " + str.tostring(adx, "#.##"))
+
+// === TABLE FOR ADX INFO ===
+if barstate.islast
+    var table infoTable = table.new(position.top_right, 2, 2, bgcolor=color.white, border_width=1)
+    table.cell(infoTable, 0, 0, "ADX", text_color=color.black, text_size=size.small)
+    table.cell(infoTable, 1, 0, str.tostring(adx, "#.##"), text_color=color.black, text_size=size.small)
+    table.cell(infoTable, 0, 1, "Threshold", text_color=color.black, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(adxThreshold), text_color=color.black, text_size=size.small)
