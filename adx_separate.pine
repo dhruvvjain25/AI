@@ -1,0 +1,30 @@
+//@version=5
+indicator("ADX Oscillator", shorttitle="ADX", format=format.price, precision=2)
+
+// === INPUTS ===
+adxPeriod = input.int(14, "ADX Period", minval=1, maxval=50)
+adxThreshold = input.int(24, "ADX Threshold", minval=10, maxval=50)
+
+// === CALCULATIONS ===
+adx = ta.adx(adxPeriod)
+di_plus = ta.dmi(adxPeriod, adxPeriod)[0]
+di_minus = ta.dmi(adxPeriod, adxPeriod)[1]
+
+// === PLOTS ===
+plot(adx, title="ADX", color=color.orange, linewidth=2)
+plot(di_plus, title="DI+", color=color.green, linewidth=1)
+plot(di_minus, title="DI-", color=color.red, linewidth=1)
+
+// Threshold line
+hline(adxThreshold, title="ADX Threshold", color=color.gray, linestyle=hline.style_dashed, linewidth=1)
+
+// Background colors for trend strength
+bgcolor(adx > adxThreshold ? color.new(color.yellow, 90) : na, title="Strong Trend Background")
+
+// Labels for trend strength
+var label strengthLabel = na
+if barstate.islast
+    label.delete(strengthLabel)
+    strengthText = adx > adxThreshold ? "Strong Trend" : "Weak Trend"
+    strengthColor = adx > adxThreshold ? color.green : color.red
+    strengthLabel := label.new(bar_index, adx, strengthText, color=strengthColor, style=label.style_label_left, textcolor=color.white, size=size.small)

@@ -1,0 +1,52 @@
+//@version=5
+indicator("Supertrend with ADX Filter", overlay=true)
+
+// === INPUTS ===
+factor = input.float(3.0, "Supertrend Factor", step=0.1)
+atrPeriod = input.int(10, "ATR Period")
+adxPeriod = input.int(14, "ADX Period")
+adxThreshold = input.int(24, "ADX Threshold")
+showADX = input.bool(true, "Show ADX in separate pane")
+
+// === CALCULATIONS ===
+// ATR
+atr = ta.atr(atrPeriod)
+
+// Supertrend Logic
+hl2 = (high + low) / 2
+upperBand = hl2 + factor * atr
+lowerBand = hl2 - factor * atr
+
+var float trendUp = na
+var float trendDown = na
+var int trend = 1
+
+// Fixed supertrend calculation with proper initialization
+trendUp := na(trendUp[1]) ? lowerBand : (close[1] > trendUp[1] ? math.max(lowerBand, trendUp[1]) : lowerBand)
+trendDown := na(trendDown[1]) ? upperBand : (close[1] < trendDown[1] ? math.min(upperBand, trendDown[1]) : upperBand)
+
+trend := close > trendUp[1] ? 1 : close < trendDown[1] ? -1 : nz(trend[1], 1)
+
+supertrend = trend == 1 ? trendUp : trendDown
+
+// ADX Calculation
+adx = ta.adx(adxPeriod)
+
+// === CONDITIONS ===
+trendChange = trend != trend[1]
+buySignal = trendChange and trend == 1 and adx > adxThreshold
+sellSignal = trendChange and trend == -1 and adx > adxThreshold
+
+// === PLOTS ===
+plotshape(buySignal, title="Buy Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.small)
+plotshape(sellSignal, title="Sell Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.small)
+
+plot(trend == 1 ? supertrend : na, title="Supertrend Up", color=color.green, linewidth=2)
+plot(trend == -1 ? supertrend : na, title="Supertrend Down", color=color.red, linewidth=2)
+
+// === ADX Plot (conditional display) ===
+plot(showADX ? adx : na, title="ADX", color=color.orange, display=display.data_window)
+
+// Alert conditions
+alertcondition(buySignal, title="Buy Signal", message="Supertrend Buy Signal with ADX > {{plot.adxThreshold}}")
+alertcondition(sellSignal, title="Sell Signal", message="Supertrend Sell Signal with ADX > {{plot.adxThreshold}}")
