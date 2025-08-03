@@ -1,0 +1,96 @@
+// === PARAMETERS ===
+SetChartOptions(0, chartShowArrows | chartShowDates);
+SetTradeDelays(1,1);
+SetOption("InitialEquity", 100000);
+SetOption("FuturesMode", False);
+SetOption("AllowSameBarExit", True);
+SetPositionSize(1, spsShares);
+BuyPrice = SellPrice = ShortPrice = CoverPrice = Close;
+
+// === TIME FILTERS ===
+TimeNumVal = TimeNum();
+StartTime = 093000;
+EndTime   = 151000;
+ExitTime  = 151500;
+
+// === SUPERTREND IMPLEMENTATION ===
+prd = 10;
+mult = 3;
+
+ATRVal = Wilders(TrueRange(), prd);
+UpperBand = (High + Low) / 2 + mult * ATRVal;
+LowerBand = (High + Low) / 2 - mult * ATRVal;
+
+TrendUp = Null;
+TrendDown = Null;
+Trend = Null;
+
+TrendUp[0] = UpperBand[0];
+TrendDown[0] = LowerBand[0];
+Trend[0] = 1;
+
+for (i = 1; i < BarCount; i++)
+{
+    TrendUp[i] = Close[i - 1] > TrendUp[i - 1] ? Max(UpperBand[i], TrendUp[i - 1]) : UpperBand[i];
+    TrendDown[i] = Close[i - 1] < TrendDown[i - 1] ? Min(LowerBand[i], TrendDown[i - 1]) : LowerBand[i];
+
+    if (Close[i] > TrendDown[i - 1])
+        Trend[i] = 1;
+    else if (Close[i] < TrendUp[i - 1])
+        Trend[i] = -1;
+    else
+        Trend[i] = Trend[i - 1];
+}
+
+// === ADX FILTER ===
+adxVal = ADX(14);
+
+// === OPENING BIAS FROM FIRST 15-MIN CANDLE ===
+TimeFrameSet(in15Minute);
+Open15 = Open;
+Close15 = Close;
+TimeFrameRestore();
+
+bias = IIf(Close15 > Open15, 1, -1);
+OpenBias = TimeFrameExpand(bias, in15Minute, expandFirst);
+
+// === DYNAMIC TARGET BASED ON VIX ===
+vix = 13;  // Set manually or pull from CSV in future
+TargetPct = IIf(vix > 15, 0.35, IIf(vix < 11.5, 0.15, 0.25));
+SLPct = 0.10;
+
+// === TRADE CONDITIONS ===
+buyCond = TimeNumVal >= StartTime AND TimeNumVal <= EndTime AND Trend == 1 AND OpenBias == 1 AND adxVal > 24;
+sellCond = Close >= Ref(Close, -1) * (1 + TargetPct) OR Close <= Ref(Close, -1) * (1 - SLPct) OR TimeNumVal >= ExitTime;
+
+shortCond = TimeNumVal >= StartTime AND TimeNumVal <= EndTime AND Trend == -1 AND OpenBias == -1 AND adxVal > 24;
+coverCond = Close <= Ref(Close, -1) * (1 - TargetPct) OR Close >= Ref(Close, -1) * (1 + SLPct) OR TimeNumVal >= ExitTime;
+
+// === LIMIT TO 2 TRADES PER SIDE ===
+StaticVarKey = Name() + "_" + Interval();
+
+staticVarBuy  = Nz(StaticVarGet("BuyTrades_" + StaticVarKey), 0);
+staticVarShort = Nz(StaticVarGet("ShortTrades_" + StaticVarKey), 0);
+
+Buy  = buyCond AND staticVarBuy < 2;
+Sell = sellCond;
+
+Short = shortCond AND staticVarShort < 2;
+Cover = coverCond;
+
+if (LastValue(Buy))
+    StaticVarSet("BuyTrades_" + StaticVarKey, staticVarBuy + 1);
+
+if (LastValue(Short))
+    StaticVarSet("ShortTrades_" + StaticVarKey, staticVarShort + 1);
+
+// === PLOTS ===
+Plot(Close, "Close", colorDefault, styleCandle);
+PlotShapes(IIf(Buy, shapeUpArrow, shapeNone), colorGreen, 0, Low, -15);
+PlotShapes(IIf(Sell, shapeDownArrow, shapeNone), colorRed, 0, High, -15);
+PlotShapes(IIf(Short, shapeDownArrow, shapeNone), colorOrange, 0, High, -30);
+PlotShapes(IIf(Cover, shapeUpArrow, shapeNone), colorBlue, 0, Low, -30);
+
+Title = "BankNifty Supertrend Strategy\n" +
+        "VIX: " + vix + " | Bias: " + WriteVal(OpenBias[BarCount-1], 1.0) + 
+        " | ADX: " + WriteVal(adxVal[BarCount-1], 1.2);
